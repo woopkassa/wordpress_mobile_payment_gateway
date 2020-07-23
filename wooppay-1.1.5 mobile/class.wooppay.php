@@ -197,6 +197,7 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 					$order->update_status('pending', __('Payment Pending.', 'woocommerce'));
 					unset($_SESSION["note"]);
 					unset($_SESSION[$order_id.'flag']);
+                    $this->cancelOldOrders();
 					return array(
 						'result' => 'success',
 						'redirect' => $invoice->response->operationUrl
@@ -261,6 +262,31 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 			if (empty($this->log))
 				$this->log = new WC_Logger();
 			$this->log->add('Wooppay', $message);
+		}
+	}
+
+    /**
+	 * Requests orders with pending status and creation date elder then 15min then updates status on canceled
+	 */
+	public function cancelOldOrders()
+	{
+		try {
+			$brakPoint15min = date("Y-m-d H:i:s", mktime(date("H")+6, date("i")-15, date("s"), date("m"), date("d"), date("Y")));
+
+			$orderQuery = new WC_Order_Query(array(
+				'status' => array('wc-pending'),
+				'type' => wc_get_order_types( 'view-orders'),
+				'date_created' => date("Y-m-d") . "..." . date("Y-m-d")
+			));
+			$orderList = $orderQuery->get_orders();
+			foreach ($orderList as $order) {
+				if ($order->get_date_created()->date("Y-m-d H:i:s") < $brakPoint15min) {
+					$order->update_status('cancelled', 'no payment during 15 minutes', true);
+				}
+			}
+		} catch (Exception $e) {
+			$this->add_log($e->getMessage());
+			wc_add_notice(__('Wooppay error:', 'woocommerce') . $e->getMessage(), 'error');
 		}
 	}
 }
