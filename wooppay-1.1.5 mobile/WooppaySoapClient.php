@@ -135,7 +135,7 @@ class WooppaySoapClient
 		$data->userEmail = $userEmail;
 		$data->userPhone = $userPhone;
 		$data->serviceName = $serviceName;
-		$data->serviceType = 2;
+		$data->option = 2;
 		return $this->cash_createInvoiceByService($data);
 	}
 
@@ -256,6 +256,8 @@ class CashCreateInvoiceRequest
 	 * @soap
 	 */
 	public $userPhone = null;
+
+	public $option = null;
 }
 
 class CashCreateInvoiceExtendedRequest extends CashCreateInvoiceRequest
