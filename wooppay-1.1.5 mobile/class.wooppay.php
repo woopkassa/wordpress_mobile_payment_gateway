@@ -33,7 +33,8 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 	public function __construct()
 	{
 		$this->id = 'wooppay_mobile';
-		$this->icon = apply_filters('woocommerce_wooppay_icon', plugins_url() . '/wooppay-1.1.5 mobile/assets/images/wooppay.png');
+		$this->icon = apply_filters('woocommerce_wooppay_icon',
+			plugins_url() . '/wooppay-1.1.5 mobile/assets/images/wooppay.png');
 		$this->has_fields = false;
 		$this->method_title = __('WOOPPAY', 'Wooppay');
 		$this->init_form_fields();
@@ -42,51 +43,58 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 		$this->description = $this->settings['description'];
 		$this->instructions = $this->get_option('instructions');
 		$this->enable_for_methods = $this->get_option('enable_for_methods', array());
-
-		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array(&$this, 'process_admin_options'));
-		add_action('woocommerce_api_wc_gateway_wooppay_mobile', array($this, 'check_response'));
+		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
 	}
 
-	public function check_response()
+	public function check_response($order_id, $order_key, $operation_id)
 	{
-		if (isset($_REQUEST['id_order']) && isset($_REQUEST['key'])) {
-			$order = wc_get_order((int)$_REQUEST['id_order']);
-			if ($order && $order->key_is_valid($_REQUEST['key'])) {
+		if (isset($order_id) && isset($order_key) && isset($operation_id)) {
+			$order = wc_get_order((int)$order_id);
+			if ($order && $order->key_is_valid($order_key)) {
 				try {
 					include_once('WooppaySoapClient.php');
-					$client = new WooppaySoapClient($this->get_option('api_url'));
+					$client = new WooppaySoapClient($this->get_option('api_url'), array('trace' => 1));
 					if ($client->login($this->get_option('api_username'), $this->get_option('api_password'))) {
-						$orderPrefix = $this->get_option('order_prefix');
-						$serviceName = $this->get_option('service_name');
-						$orderId = $order->get_id();
-						if ($orderPrefix) {
-							$orderId = $orderPrefix . '_' . $orderId;
-						}
-						$invoice = $client->createInvoice($orderId, '', '', $order->order_total, $serviceName);
-						if ($client->getOperationData((int)$invoice->response->operationId)->response->records[0]->status == WooppayOperationStatus::OPERATION_STATUS_DONE) {
+						$count = 0;
+						do {
+							$status = $client->getOperationData((int)$operation_id)->response->records[0]->status;
+							sleep(5);
+							$count++;
+						} while ($count < 10 && $status == WooppayOperationStatus::OPERATION_STATUS_NEW || $status == WooppayOperationStatus::OPERATION_STATUS_CONSIDER);
+						if ($client->getOperationData((int)$operation_id)->response->records[0]->status == WooppayOperationStatus::OPERATION_STATUS_DONE) {
 							$order->update_status('completed', __('Payment completed.', 'woocommerce'));
-							die('{"data":1}');
+							return '{"data":1}';
 						}
 					}
 				} catch (Exception $e) {
 					$this->add_log($e->getMessage());
-					wc_add_notice(__('Wooppay error:', 'woocommerce') . $e->getMessage() . print_r($order, true), 'error');
+					if ($e->getCode() == 606) {
+						throw new Exception("auth_failed");
+						return null;
+//						wc_add_notice('Оплата не прошла аутентификацию', 'error');
+					} else {
+						wc_add_notice(__('Wooppay error:', 'woocommerce') . $e->getMessage() . print_r($order, true),
+							'error');
+					}
+
 				}
-			} else
+			} else {
 				$this->add_log('Error order key: ' . print_r($_REQUEST, true));
-		} else
+			}
+		} else {
 			$this->add_log('Error call back: ' . print_r($_REQUEST, true));
-		die('{"data":1}');
+		}
+		return '{"data":1}';
 	}
 
 	/* Admin Panel Options.*/
 	public function admin_options()
 	{
 		?>
-		<h3><?php _e('Wooppay', 'wooppay_mobile'); ?></h3>
-		<table class="form-table">
+        <h3><?php _e('Wooppay', 'wooppay_mobile'); ?></h3>
+        <table class="form-table">
 			<?php $this->generate_settings_html(); ?>
-		</table> <?php
+        </table> <?php
 	}
 
 	/* Initialise Gateway Settings Form Fields. */
@@ -96,10 +104,11 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 
 		$shipping_methods = array();
 
-		if (is_admin())
+		if (is_admin()) {
 			foreach ($woocommerce->shipping->load_shipping_methods() as $method) {
 				$shipping_methods[$method->id] = $method->get_title();
 			}
+		}
 
 		$this->form_fields = array(
 			'enabled' => array(
@@ -118,14 +127,16 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 			'description' => array(
 				'title' => __('Description', 'wooppay_mobile'),
 				'type' => 'textarea',
-				'description' => __('This controls the description which the user sees during checkout.', 'wooppay_mobile'),
+				'description' => __('This controls the description which the user sees during checkout.',
+					'wooppay_mobile'),
 				'default' => __('Оплата с номера мобильного телефона.', 'wooppay_mobile')
 			),
 			'instructions' => array(
 				'title' => __('Instructions', 'wooppay_mobile'),
 				'type' => 'textarea',
 				'description' => __('Instructions that will be added to the thank you page.', 'wooppay_mobile'),
-				'default' => __('Введите все необходимые данные, нажмите кнопку отправить, введите код из смс и нажмите кнопку отправить повторно.', 'wooppay_mobile')
+				'default' => __('Введите все необходимые данные, нажмите кнопку отправить, введите код из смс и нажмите кнопку отправить повторно.',
+					'wooppay_mobile')
 			),
 			'api_details' => array(
 				'title' => __('API Credentials', 'wooppay_mobile'),
@@ -182,9 +193,13 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 		session_start();
 		$order = new WC_Order($order_id);
 		$code = $order->get_customer_note();
-		if (isset($_SESSION[$order_id.'flag'])) {
+		if (isset($_SESSION[$order_id . 'flag']) && isset($code)) {
 			try {
-				$phone = substr($order->get_billing_phone(), 1);
+				if (empty($code)) {
+					throw new Exception("empty_sms_code");
+				}
+				$phone = preg_replace('/[^0-9]/', '', $order->get_billing_phone());
+				$phone = substr($phone, 1);
 				$order->save();
 				$client = new WooppaySoapClient($this->get_option('api_url'));
 				if ($client->login($this->get_option('api_username'), $this->get_option('api_password'))) {
@@ -192,57 +207,68 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 					$requestUrl = WC()->api_request_url('WC_Gateway_Wooppay_Mobile') . '?id_order=' . $order_id . '&key=' . $order->order_key;
 					$orderPrefix = $this->get_option('order_prefix');
 					$serviceName = $this->get_option('service_name');
-					$invoice = $client->createInvoice($orderPrefix . '_' . $order_id, $backUrl, $requestUrl, $order->total, $serviceName, $code, '', $order->description, $order->billing_email, $phone);
+					$invoice = $client->createInvoice($orderPrefix . '_' . $order_id, $backUrl, $requestUrl,
+						$order->total, $serviceName, $code, '', $order->description, $order->billing_email, $phone);
 					$woocommerce->cart->empty_cart();
 					$order->update_status('pending', __('Payment Pending.', 'woocommerce'));
 					unset($_SESSION["note"]);
-					unset($_SESSION[$order_id.'flag']);
+					unset($_SESSION[$order_id . 'flag']);
 					return array(
 						'result' => 'success',
-						'redirect' => $invoice->response->operationUrl
+						'redirect' => $backUrl
 					);
 				}
 			} catch (Exception $e) {
 				if ($e->getCode() == 603) {
-					wc_add_notice(__('Недопустимый сотовый оператор для оплаты с мобильного телефона. Допустимые операторы Activ, Kcell, Beeline.', 'woocommerce'), 'error');
-				}
-                elseif ($e->getCode() == 223) {
+					wc_add_notice(__('Недопустимый сотовый оператор для оплаты с мобильного телефона. Допустимые операторы Activ, Kcell, Beeline.',
+						'woocommerce'), 'error');
+				} elseif ($e->getCode() == 223) {
 					wc_add_notice(__('Неверный код подтверждения.', 'woocommerce'), 'error');
-				}
-                elseif ($e->getCode() == 224) {
-					wc_add_notice(__('Вы ввели неверный код подтверждения слишком много раз. Попробуйте через 5 минут.', 'woocommerce'), 'error');
-				}
-                elseif ($e->getCode() == 226) {
-					wc_add_notice(__('У вас недостаточно средств на балансе мобильного телефона.', 'woocommerce'), 'error');
-				}
-				else {
+				} elseif ($e->getCode() == 224) {
+					wc_add_notice(__('Вы ввели неверный код подтверждения слишком много раз. Попробуйте через 5 минут.',
+						'woocommerce'), 'error');
+				} elseif ($e->getCode() == 226) {
+					wc_add_notice(__('У вас недостаточно средств на балансе мобильного телефона.', 'woocommerce'),
+						'error');
+				} elseif ($e->getMessage() == 'empty_sms_code') {
+					wc_add_notice('В поле комментария отсутствует смс код', 'error');
+				} elseif ($e->getMessage() == 'auth_failed'){
+					wc_add_notice('Оплата не прошла аутентификацию', 'error');
+				} else {
 					$this->add_log($e->getMessage());
 					wc_add_notice(__('Wooppay error:', 'woocommerce') . $e->getCode(), 'error');
 				}
 			}
 		} else {
 			try {
+				if (isset($_SESSION["note"]) || isset($_SESSION[$order_id . 'flag'])) {
+					unset($_SESSION["note"]);
+					unset($_SESSION[$order_id . 'flag']);
+				}
 				session_start();
 				$phone = $order->get_billing_phone();
+				$phone = preg_replace('/[^0-9]/', '', $phone);
 				$client = new WooppaySoapClient($this->get_option('api_url'));
-//				$_SESSION["note"]=$order->get_customer_note();
 				if ($client->login($this->get_option('api_username'), $this->get_option('api_password'))) {
 					$operator = $client->checkOperator($phone);
 					$operator = $operator->response->operator;
 					if ($operator == 'beeline' || $operator == 'activ' || $operator == 'kcell') {
 						$phone = substr($phone, 1);
 						$client->requestConfirmationCode($phone);
-						wc_add_notice(__('Введите код из смс в поле комментария и нажмите отправить заказ. Ваш комментарий уже был сохранён.', 'woocommerce'));
-						$_SESSION[$order_id.'flag']= '';
+						wc_add_notice(__('Введите код из смс в поле комментария и нажмите отправить заказ. Ваш комментарий уже был сохранён.',
+							'woocommerce'));
+						$_SESSION[$order_id . 'flag'] = '';
+						$_SESSION["note"] = $order->get_customer_note();
 					} else {
-						wc_add_notice(__('Недопустимый сотовый оператор для оплаты с мобильного телефона. Допустимые операторы Activ, Kcell, Beeline.', 'woocommerce'), 'error');
+						wc_add_notice(__('Недопустимый сотовый оператор для оплаты с мобильного телефона. Допустимые операторы Activ, Kcell, Beeline.',
+							'woocommerce'), 'error');
 					}
 				}
 			} catch (Exception $e) {
 				if ($e->getCode() == 222) {
-					wc_add_notice(__('Вы уже запрашивали код подтверждения на данный номер в течение предыдущих 5 минут', 'woocommerce'), 'error');
-				}
-				else {
+					wc_add_notice(__('Вы уже запрашивали код подтверждения на данный номер в течение предыдущих 5 минут',
+						'woocommerce'), 'error');
+				} else {
 					$this->add_log($e->getMessage());
 					wc_add_notice(__('Wooppay error:', 'woocommerce') . $e->getCode(), 'error');
 				}
@@ -258,8 +284,9 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 	function add_log($message)
 	{
 		if ($this->debug == 'yes') {
-			if (empty($this->log))
+			if (empty($this->log)) {
 				$this->log = new WC_Logger();
+			}
 			$this->log->add('Wooppay', $message);
 		}
 	}
