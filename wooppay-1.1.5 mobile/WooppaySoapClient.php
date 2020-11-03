@@ -34,7 +34,7 @@ class WooppaySoapClient
 	public function __construct($url, $options = array())
 	{
 		try {
-			$this->c = new SoapClient($url, $options);
+			$this->c = new SoapClient($url, array('trace' => 1));
 		} catch (Exception $e) {
 			throw new WooppaySoapException($e->getMessage());
 		}
@@ -54,9 +54,9 @@ class WooppaySoapClient
 	public function __call($method, $data)
 	{
 		try {
-
 			$response = $this->c->$method($data[0]);
 		} catch (Exception $e) {
+			$last_response = $this->c->__getLastResponse();
 			throw new WooppaySoapException($e->getMessage());
 		}
 		$response = new WooppaySoapResponse($response);
@@ -67,6 +67,8 @@ class WooppaySoapClient
 			case 5:
 				throw new BadCredentialsException();
 				break;
+			case 606:
+				throw new Exception("auth_failed");
 			default:
 				throw new UnsuccessfulResponseException('Error code ' . $response->error_code, $response->error_code);
 		}
@@ -125,7 +127,7 @@ class WooppaySoapClient
 	public function createInvoice($referenceId, $backUrl, $requestUrl, $amount, $serviceName = '', $addInfo = '', $deathDate = '', $description = '', $userEmail = '', $userPhone = '')
 	{
 		$data = new CashCreateInvoiceByServiceRequest();
-		$data->referenceId = $referenceId;
+		$data->referenceId = $referenceId.'.'.time();
 		$data->backUrl = $backUrl;
 		$data->requestUrl = $requestUrl;
 		$data->amount = (float)$amount;
@@ -135,7 +137,7 @@ class WooppaySoapClient
 		$data->userEmail = $userEmail;
 		$data->userPhone = $userPhone;
 		$data->serviceName = $serviceName;
-		$data->option = 2;
+		$data->serviceType = 2;
 		return $this->cash_createInvoiceByService($data);
 	}
 
@@ -256,8 +258,6 @@ class CashCreateInvoiceRequest
 	 * @soap
 	 */
 	public $userPhone = null;
-
-	public $option = null;
 }
 
 class CashCreateInvoiceExtendedRequest extends CashCreateInvoiceRequest

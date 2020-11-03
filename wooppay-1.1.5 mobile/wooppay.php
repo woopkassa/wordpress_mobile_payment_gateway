@@ -37,7 +37,9 @@
 
 function wc_cpg_fallback_notice()
 {
-	echo '<div class="error"><p>' . sprintf(__('WooCommerce Wooppay Mobile Payments depends on the last version of %s to work!', 'wooppay_mobile'), '<a href="http://wordpress.org/extend/plugins/woocommerce/">WooCommerce</a>') . '</p></div>';
+	echo '<div class="error"><p>' . sprintf(__('WooCommerce Wooppay Mobile Payments depends on the last version of %s to work!',
+			'wooppay_mobile'),
+			'<a href="http://wordpress.org/extend/plugins/woocommerce/">WooCommerce</a>') . '</p></div>';
 }
 
 function wc_custom_payment_gateway_load()
@@ -76,5 +78,57 @@ function wc_cpg_action_links($links)
 
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'wc_cpg_action_links');
 
+function init_assets(){
+	wp_register_script('prefix_bootstrap_js', plugins_url('/assets/bootstrap/js/bootstrap.min.js', __FILE__), array('jquery'));
+	wp_enqueue_script('prefix_bootstrap_js');
 
+	wp_register_style('prefix_bootstrap_style', plugins_url('/assets/bootstrap/css/bootstrap.min.css', __FILE__));
+	wp_enqueue_style('prefix_bootstrap_style');
+
+	wp_register_style('prefix_modal_style', plugins_url('/css/modal.css', __FILE__));
+	wp_enqueue_style('prefix_modal_style');
+}
+
+add_action('woocommerce_checkout_init', 'init_assets');
+
+function add_bootstrap_modal()
+{
+	?>
+	<div class="modal fade" id="pleaseWaitDialog" tabindex="-1" role="dialog" aria-labelledby="myModalLabel"
+	     aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-body">
+					<img class="modal__preloader" src="<?php echo plugins_url() . '/wooppay-1.1.5 mobile/assets/images/preloader.gif'?>" alt="Preloader" width="146" height="146">
+				</div>
+			</div>
+		</div>
+	</div>
+	<?php
+}
+
+add_action('woocommerce_checkout_init', 'add_bootstrap_modal');
+
+add_action('woocommerce_checkout_init', 'modal_action_javascript', 99);
+function modal_action_javascript()
+{
+	?>
+	<script>
+        document.addEventListener('DOMContentLoaded', function () {
+            function beforeSend() {
+                jQuery('#pleaseWaitDialog').modal('show');
+                jQuery('#pleaseWaitDialog').css("display" , 'flex');
+            }
+            function logSubmit(event) {
+                beforeSend();
+                jQuery(document).ajaxComplete(function (){
+                    jQuery('#pleaseWaitDialog').modal('hide');
+                })
+            }
+            const form = document.getElementsByClassName('checkout');
+            form[0].addEventListener('submit', logSubmit);
+        });
+	</script>
+	<?php
+}
 ?>
