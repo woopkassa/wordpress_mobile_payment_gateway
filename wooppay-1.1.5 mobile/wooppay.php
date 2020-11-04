@@ -87,6 +87,9 @@ function init_assets(){
 
 	wp_register_style('prefix_modal_style', plugins_url('/css/modal.css', __FILE__));
 	wp_enqueue_style('prefix_modal_style');
+
+	wp_register_style('prefix_style', plugins_url('/css/style.css', __FILE__));
+	wp_enqueue_style('prefix_style');
 }
 
 add_action('woocommerce_checkout_init', 'init_assets');

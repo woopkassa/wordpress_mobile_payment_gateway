@@ -34,7 +34,7 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 	{
 		$this->id = 'wooppay_mobile';
 		$this->icon = apply_filters('woocommerce_wooppay_icon',
-			plugins_url() . '/wooppay-1.1.5 mobile/assets/images/wooppay.png');
+			plugins_url() . '/wooppay-1.1.5 mobile/assets/images/wooppay_mobile.svg');
 		$this->has_fields = false;
 		$this->method_title = __('WOOPPAY', 'Wooppay');
 		$this->init_form_fields();
