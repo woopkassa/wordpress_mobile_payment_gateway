@@ -61,7 +61,8 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 							sleep(5);
 							$count++;
 						} while ($count < 10 && $status == WooppayOperationStatus::OPERATION_STATUS_NEW || $status == WooppayOperationStatus::OPERATION_STATUS_CONSIDER);
-						if ($client->getOperationData((int)$operation_id)->response->records[0]->status == WooppayOperationStatus::OPERATION_STATUS_DONE) {
+						$status = $client->getOperationData((int)$operation_id)->response->records[0]->status;
+						if ($status == WooppayOperationStatus::OPERATION_STATUS_DONE || $status == WooppayOperationStatus::OPERATION_STATUS_WAITING) {
 							$order->update_status('completed', __('Payment completed.', 'woocommerce'));
 							return '{"data":1}';
 						}
