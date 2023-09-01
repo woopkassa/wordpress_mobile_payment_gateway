@@ -29,6 +29,18 @@
 
 class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 {
+	private const KZ_AVAILABLE_OPERATORS = [
+		'beeline',
+		'activ',
+		'kcell'
+	];
+
+	private const TJ_AVAILABLE_OPERATORS = [
+		'tcell',
+		'megafon',
+		'zetmobile',
+		'babilon'
+	];
 
 	public function __construct()
 	{
@@ -199,11 +211,15 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 				if (empty($code)) {
 					throw new Exception("empty_sms_code");
 				}
-				$phone = preg_replace('/[^0-9]/', '', $order->get_billing_phone());
-				$phone = substr($phone, 1);
-				$order->save();
 				$client = new WooppaySoapClient($this->get_option('api_url'));
+				$order->save();
 				if ($client->login($this->get_option('api_username'), $this->get_option('api_password'))) {
+					$phone = preg_replace('/[^0-9]/', '', $order->get_billing_phone());
+					$operator = $client->checkOperator($phone);
+					$operator = $operator->response->operator;
+					if (in_array($operator, self::KZ_AVAILABLE_OPERATORS)) {
+						$phone = substr($phone, 1);
+					}
 					$backUrl = $this->get_return_url($order);
 					$requestUrl = WC()->api_request_url('WC_Gateway_Wooppay_Mobile') . '?id_order=' . $order_id . '&key=' . $order->order_key;
 					$orderPrefix = $this->get_option('order_prefix');
@@ -221,7 +237,7 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 				}
 			} catch (Exception $e) {
 				if ($e->getCode() == 603) {
-					wc_add_notice(__('Недопустимый сотовый оператор для оплаты с мобильного телефона. Допустимые операторы Activ, Kcell, Beeline.',
+					wc_add_notice(__('Недопустимый сотовый оператор для оплаты с мобильного телефона. Допустимые операторы Activ, Kcell, Beeline, Tcell, Megafon Tj, Zet-Mobile, Babilon-M',
 						'woocommerce'), 'error');
 				} elseif ($e->getCode() == 223) {
 					wc_add_notice(__('Неверный код подтверждения.', 'woocommerce'), 'error');
@@ -253,16 +269,17 @@ class WC_Gateway_Wooppay_Mobile extends WC_Payment_Gateway
 				if ($client->login($this->get_option('api_username'), $this->get_option('api_password'))) {
 					$operator = $client->checkOperator($phone);
 					$operator = $operator->response->operator;
-					if ($operator == 'beeline' || $operator == 'activ' || $operator == 'kcell') {
-						$phone = substr($phone, 1);
+					if (in_array($operator, array_merge(self::KZ_AVAILABLE_OPERATORS, self::TJ_AVAILABLE_OPERATORS))) {
+						if (in_array($phone, self::KZ_AVAILABLE_OPERATORS)) {
+							$phone = substr($phone, 1);
+						}
 						$client->requestConfirmationCode($phone);
 						wc_add_notice(__('Введите код из смс в поле комментария и нажмите отправить заказ. Ваш комментарий уже был сохранён.',
 							'woocommerce'));
 						$_SESSION[$order_id . 'flag'] = '';
 						$_SESSION["note"] = $order->get_customer_note();
 					} else {
-						wc_add_notice(__('Недопустимый сотовый оператор для оплаты с мобильного телефона. Допустимые операторы Activ, Kcell, Beeline.',
-							'woocommerce'), 'error');
+						wc_add_notice(__('Недопустимый сотовый оператор для оплаты с мобильного телефона. Допустимые операторы Activ, Kcell, Beeline, Tcell, Megafon Tj, Zet-Mobile, Babilon-M.', 'woocommerce'), 'error');
 					}
 				}
 			} catch (Exception $e) {
